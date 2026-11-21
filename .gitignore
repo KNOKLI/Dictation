@@ -1,0 +1,23 @@
+# Xcode / Swift
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+DerivedData/
+.build/
+build/
+dist/
+*.dmg
+*.app
+# macOS
+.DS_Store
+# бэкапы
+_backup*/
+*.bak
+*.bak-*
+# личные заметки и правила для Claude — не выкладывать
+CLAUDE.md
+Журнал_правок.md
+Пожелания.md
+# секреты
+.env
+*.env
