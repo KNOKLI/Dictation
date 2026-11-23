@@ -1,101 +1,117 @@
 import SwiftUI
-import Charts
 
-/// 2026-11-24 (Камиль): Q1 «Только главное» — три больших числа и тонкий график 14 дней.
-/// Прежний вид (6 карточек + Charts) — `_backup-2026-11-24-Q1/StatsView.swift`.
+/// 2026-11-24 (Камиль): R5.5 «Как „Настройки“» — цифры строками «название … значение» и график недели.
+/// Прежний вид (Q1: три числа и график 14 дней) — `_backup-2026-11-24-R5.5/StatsView.swift`.
 struct StatsView: View {
     @Environment(AppState.self) private var state
-    @State private var hoverDay: Int?
 
-    private static let dayNumber: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "d"
-        return f
-    }()
-
-    private static let longDay: DateFormatter = {
+    private static let dayMonth: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ru_RU")
         f.dateFormat = "d MMMM"
         return f
     }()
 
+    private static let keyParser: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
     var body: some View {
-        let days = state.history.lastDays(14)
-        let week = days.suffix(7).reduce(0) { $0 + $1.characters }
-        let top = max(1, days.map(\.characters).max() ?? 1)
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 50) {
-                number(RU.number(state.history.todayCharacters), "Сегодня")
-                number(RU.number(week), "Неделя")
-                number(RU.number(state.history.archive.totalCharacters), "Всего")
-                Spacer()
-            }
-            Spacer().frame(height: 36)
-            GeometryReader { g in
-                HStack(alignment: .bottom, spacing: 0) {
-                    ForEach(Array(days.enumerated()), id: \.offset) { i, d in
-                        let today = i == days.count - 1
-                        VStack(spacing: 8) {
-                            if hoverDay == i {
-                                Text(RU.number(d.characters)).font(.system(size: 13, weight: .semibold)).monospacedDigit()
-                                    .fixedSize()
-                            }
-                            Capsule()
-                                .fill(today ? AnyShapeStyle(Color.accentColor)
-                                      : AnyShapeStyle(.primary.opacity(hoverDay == i ? 0.45 : 0.22)))
-                                .frame(width: 8, height: max(4, CGFloat(d.characters) / CGFloat(top) * (g.size.height - 50)))
-                            Text(today ? "сег." : Self.dayNumber.string(from: d.day))
-                                .font(.system(size: 12, weight: today ? .semibold : .regular))
-                                .foregroundStyle(today ? .primary : .tertiary)
-                                .frame(height: 14)
+        let history = state.history
+        let archive = history.archive
+        let week = history.lastDays(7)
+        let weekTotal = week.reduce(0) { $0 + $1.characters }
+        let rows: [(String, String)] = [
+            ("Сегодня", RU.number(history.todayCharacters)),
+            ("Неделя", RU.number(weekTotal)),
+            ("Всего", RU.number(archive.totalCharacters)),
+            ("Лучший день", bestDay(archive.daily)),
+            ("Скорость", history.charsPerMinute > 0 ? "\(RU.number(history.charsPerMinute)) в минуту" : "—"),
+        ]
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(title: "Статистика", subtitle: RU.chars(archive.totalCharacters))
+                SettingsGroup(title: "Символы") {
+                    ForEach(rows.indices, id: \.self) { k in
+                        SettingsRow(last: k == rows.count - 1) {
+                            Text(rows[k].0).font(.system(size: 16))
+                            Spacer()
+                            Text(rows[k].1).font(.system(size: 16).monospacedDigit()).foregroundStyle(.secondary)
+                                .contentTransition(.numericText())
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .contentShape(.rect)
-                        .onHover { hoverDay = $0 ? i : (hoverDay == i ? nil : hoverDay) }
-                        .help("\(Self.longDay.string(from: d.day)): \(RU.chars(d.characters))")
                     }
                 }
+                SettingsGroup(title: "Эта неделя", trailing: RU.chars(weekTotal)) {
+                    WeekBars(days: week).frame(height: 180).padding(16)
+                }
             }
+            .padding(.horizontal, 20).padding(.top, 24).padding(.bottom, 28)
+            .frame(maxWidth: R55.column)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 44).padding(.vertical, 32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("Статистика")
     }
 
-    private func number(_ value: String, _ title: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(value).font(.system(size: 40, weight: .light, design: .rounded)).monospacedDigit()
-                .contentTransition(.numericText())
-            Text(title).font(.system(size: 15)).foregroundStyle(.secondary)
-        }
+    /// «6 820 · 17 ноября» — день с наибольшим числом символов
+    private func bestDay(_ daily: [String: Int]) -> String {
+        guard let best = daily.max(by: { $0.value < $1.value }), best.value > 0 else { return "—" }
+        let day = Self.keyParser.date(from: best.key).map { Self.dayMonth.string(from: $0) } ?? best.key
+        return "\(RU.number(best.value)) · \(day)"
     }
 }
 
-private struct StatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let tint: Color
+/// Неделя столбиками: число сверху, день недели снизу, сегодня — синим.
+private struct WeekBars: View {
+    let days: [DayStat]
+    @State private var hover: Int?
+
+    private static let weekday: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ru_RU")
+        f.dateFormat = "EEEEEE" // пн, вт…
+        return f
+    }()
+
+    private static let longDay: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ru_RU")
+        f.dateFormat = "d MMMM, EEEE"
+        return f
+    }()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(tint.gradient)
-            Text(value)
-                .font(.system(size: 28, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .contentTransition(.numericText())
-            Text(title)
-                .font(.callout)
-                .foregroundStyle(.secondary)
+        let top = max(1, days.map(\.characters).max() ?? 1)
+        GeometryReader { g in
+            HStack(alignment: .bottom, spacing: 0) {
+                ForEach(days.indices, id: \.self) { i in
+                    let d = days[i]
+                    let today = i == days.count - 1
+                    VStack(spacing: 6) {
+                        Text(d.characters > 0 ? short(d.characters) : "")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(hover == i ? .primary : .secondary)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(today ? AnyShapeStyle(Color.accentColor)
+                                  : AnyShapeStyle(Color.accentColor.opacity(hover == i ? 0.55 : 0.35)))
+                            .frame(width: 34, height: max(6, CGFloat(d.characters) / CGFloat(top) * (g.size.height - 44)))
+                        Text(today ? "сег." : Self.weekday.string(from: d.day).lowercased())
+                            .font(.system(size: 13, weight: today ? .semibold : .regular))
+                            .foregroundStyle(today ? .primary : .secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .contentShape(.rect)
+                    .onHover { hover = $0 ? i : (hover == i ? nil : hover) }
+                    .help("\(Self.longDay.string(from: d.day)): \(RU.chars(d.characters))")
+                }
+            }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: .rect(cornerRadius: 20))
+    }
+
+    /// 6820 → «6,8к», 120 → «120»
+    private func short(_ n: Int) -> String {
+        n >= 1000 ? (Double(n) / 1000).formatted(.number.precision(.fractionLength(1)).locale(Locale(identifier: "ru_RU"))) + "к" : "\(n)"
     }
 }

@@ -1,126 +1,149 @@
 import SwiftUI
 
 /// Свой словарь: слова и имена (подсказка модели), автозамены, голосовые команды.
+/// 2026-11-24 (Камиль): R5.5 «Как „Настройки“» — слова и исправления одним списком, команды отдельной группой.
+/// Прежний вид (Q1: две колонки) — `_backup-2026-11-24-R5.5/VocabularyView.swift`.
 struct VocabularyView: View {
     @Environment(AppState.self) private var state
-    @State private var newTerm = ""
-    @State private var from = ""
-    @State private var to = ""
-
-    // 2026-11-24 (Камиль): Q1 «Только главное» — две колонки крупным текстом, без рамок.
-    // Прежний вид (форма) — `_backup-2026-11-24-Q1/VocabularyView.swift`.
-    @State private var addingTerm = false
-    @State private var addingSwap = false
+    @State private var adding = false
+    @State private var first = ""
+    @State private var second = ""
     @FocusState private var focus: Int?
 
     var body: some View {
         @Bindable var state = state
         let vocab = state.vocabulary
         ScrollView {
-            HStack(alignment: .top, spacing: 60) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Слова").font(.system(size: 15, weight: .semibold)).foregroundStyle(.secondary)
-                    if vocab.terms.isEmpty && !addingTerm {
-                        Text("Пока пусто. Например: малярка, Азамат, Excel").font(.system(size: 16)).foregroundStyle(.tertiary)
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(title: "Словарь", subtitle: "\(vocab.terms.count) \(RU.plural(vocab.terms.count, "слово", "слова", "слов")) · \(vocab.replacements.count) \(RU.plural(vocab.replacements.count, "исправление", "исправления", "исправлений"))")
+
+                SettingsGroup(title: "Словарь") {
+                    if vocab.terms.isEmpty && vocab.replacements.isEmpty && !adding {
+                        SettingsRow {
+                            Text("Пока пусто. Например: малярка, Азамат, Excel или «Майорки → малярки»")
+                                .font(.system(size: 15)).foregroundStyle(.tertiary)
+                            Spacer()
+                        }
                     }
                     ForEach(vocab.terms, id: \.self) { term in
-                        QuietItem {
-                            Text(term).font(.system(size: 18))
+                        VocabRow(icon: "character.cursor.ibeam", kind: "слово") {
+                            Text(term).font(.system(size: 17))
                         } onDelete: {
                             vocab.terms.removeAll { $0 == term }
                         }
                     }
-                    if addingTerm {
-                        TextField("Слово", text: $newTerm, prompt: Text("Слово или имя — Return, чтобы добавить"))
-                            .textFieldStyle(.plain).font(.system(size: 18))
-                            .focused($focus, equals: 1)
-                            .onSubmit { addTerm(); addingTerm = !newTerm.isEmpty }
-                            .onExitCommand { addingTerm = false; newTerm = "" }
-                    }
-                    Button("+ Добавить слово") { addingTerm = true; focus = 1 }
-                        .buttonStyle(.plain).font(.system(size: 15, weight: .medium)).foregroundStyle(Color.accentColor)
-                        .padding(.top, 4)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Исправления").font(.system(size: 15, weight: .semibold)).foregroundStyle(.secondary)
-                    if vocab.replacements.isEmpty && !addingSwap {
-                        Text("Пока пусто. Например: Майорки → малярки").font(.system(size: 16)).foregroundStyle(.tertiary)
-                    }
                     ForEach(vocab.replacements) { r in
-                        QuietItem {
-                            HStack(spacing: 10) {
-                                Text(r.from).foregroundStyle(.tertiary)
+                        VocabRow(icon: "arrow.triangle.2.circlepath", kind: "исправление") {
+                            HStack(spacing: 8) {
+                                Text(r.from).foregroundStyle(.secondary)
                                 Text("→").foregroundStyle(.tertiary)
                                 Text(r.to)
                             }
-                            .font(.system(size: 18))
+                            .font(.system(size: 17))
                         } onDelete: {
                             vocab.replacements.removeAll { $0.id == r.id }
                         }
                     }
-                    if addingSwap {
-                        HStack(spacing: 10) {
-                            TextField("Как распознаёт", text: $from, prompt: Text("Как распознаёт"))
-                                .textFieldStyle(.plain).focused($focus, equals: 2)
-                                .onSubmit { focus = 3 }
+                    if adding {
+                        SettingsRow {
+                            Image(systemName: "plus").foregroundStyle(Color.accentColor).frame(width: 22)
+                            TextField("Слово", text: $first, prompt: Text("Слово или имя"))
+                                .textFieldStyle(.plain).font(.system(size: 16))
+                                .focused($focus, equals: 1)
+                                .onSubmit { second.isEmpty && !first.isEmpty ? add() : (focus = 2) }
                             Text("→").foregroundStyle(.tertiary)
-                            TextField("Как должно быть", text: $to, prompt: Text("Как должно быть"))
-                                .textFieldStyle(.plain).focused($focus, equals: 3)
-                                .onSubmit { addReplacement(); addingSwap = false }
+                            TextField("Исправить на", text: $second, prompt: Text("исправить на (не обязательно)"))
+                                .textFieldStyle(.plain).font(.system(size: 16))
+                                .focused($focus, equals: 2)
+                                .onSubmit { add() }
                         }
-                        .font(.system(size: 18))
-                        .onExitCommand { addingSwap = false; from = ""; to = "" }
+                        .onExitCommand { cancel() }
                     }
-                    Button("+ Добавить исправление") { addingSwap = true; focus = 2 }
-                        .buttonStyle(.plain).font(.system(size: 15, weight: .medium)).foregroundStyle(Color.accentColor)
-                        .padding(.top, 4)
+                    SettingsRow(last: true) {
+                        Button {
+                            if adding { add() } else { adding = true; focus = 1 }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus").frame(width: 22)
+                                Text(adding ? "Добавить" : "Добавить слово или исправление").font(.system(size: 16))
+                                Spacer()
+                            }
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        if adding {
+                            Button("Отмена") { cancel() }
+                                .buttonStyle(.plain).font(.system(size: 15)).foregroundStyle(.secondary)
+                        }
+                    }
+                }
 
-                    HStack {
-                        Text("Голосовые команды").font(.system(size: 17))
+                SettingsGroup(title: "Голосовые команды") {
+                    SettingsRow(last: true) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(state.voiceCommands ? "Включены" : "Выключены").font(.system(size: 16))
+                            Text("«новая строка», «запятая», «двоеточие» и другие")
+                                .font(.system(size: 13)).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 6)
                         Spacer()
                         Toggle("Голосовые команды", isOn: $state.voiceCommands).toggleStyle(.switch).labelsHidden()
                     }
-                    .padding(.top, 30)
                     .help("Скажи: \(VoiceCommands.help)")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 44).padding(.vertical, 28)
+            .padding(.horizontal, 20).padding(.top, 24).padding(.bottom, 28)
+            .frame(maxWidth: R55.column)
+            .frame(maxWidth: .infinity)
         }
         .navigationTitle("Словарь")
-        .navigationSubtitle("\(vocab.terms.count) \(RU.plural(vocab.terms.count, "слово", "слова", "слов")) · \(vocab.replacements.count) \(RU.plural(vocab.replacements.count, "автозамена", "автозамены", "автозамен"))")
     }
 
-    private func addTerm() {
-        state.vocabulary.addTerm(newTerm)
-        newTerm = ""
+    /// Второе поле пустое — новое слово; заполнено — исправление «первое → второе».
+    private func add() {
+        let a = first.trimmingCharacters(in: .whitespaces)
+        let b = second.trimmingCharacters(in: .whitespaces)
+        guard !a.isEmpty else { cancel(); return }
+        if b.isEmpty {
+            state.vocabulary.addTerm(a)
+        } else {
+            state.vocabulary.addReplacement(from: a, to: b)
+        }
+        first = ""
+        second = ""
+        focus = 1 // поле остаётся — можно сразу добавить следующее
     }
 
-    private func addReplacement() {
-        state.vocabulary.addReplacement(from: from, to: to)
-        from = ""
-        to = ""
+    private func cancel() {
+        adding = false
+        first = ""
+        second = ""
     }
 }
 
-/// Строка словаря: при наведении справа появляется ✕
-private struct QuietItem<C: View>: View {
+/// Строка словаря: значок, содержимое, тип справа; при наведении вместо типа — ✕
+private struct VocabRow<C: View>: View {
+    let icon: String
+    let kind: String
     @ViewBuilder var content: C
     var onDelete: () -> Void
     @State private var hover = false
 
     var body: some View {
-        HStack {
+        SettingsRow {
+            Image(systemName: icon).foregroundStyle(.secondary).frame(width: 22)
             content
             Spacer(minLength: 12)
-            Button(action: onDelete) {
-                Image(systemName: "xmark.circle.fill").font(.system(size: 15)).foregroundStyle(.tertiary)
+            ZStack(alignment: .trailing) {
+                Text(kind).font(.system(size: 13)).foregroundStyle(.tertiary).opacity(hover ? 0 : 1)
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 15)).foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Удалить")
+                .opacity(hover ? 1 : 0)
             }
-            .buttonStyle(.plain)
-            .help("Удалить")
-            .opacity(hover ? 1 : 0)
         }
         .contentShape(.rect)
         .onHover { hover = $0 }

@@ -26,10 +26,14 @@ struct HistoryView: View {
         // Поиск и панель подробностей — внутри окна, а не в панели инструментов:
         // так переключатель разделов не сдвигается и не перестраивается (не лагает).
         HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                searchBar(found: found)
+            // 2026-11-24 (Камиль): R5.5 — крупный заголовок и одна колонка по центру
+            VStack(spacing: 6) {
+                header(found: found)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 24)
                 listArea(groups: groups)
             }
+            .frame(maxWidth: R55.column + 40)
             .frame(maxWidth: .infinity)
             if showInspector {
                 Divider()
@@ -79,16 +83,23 @@ struct HistoryView: View {
                                     .tag(entry.id)
                             }
                         } header: {
-                            HStack {
+                            HStack(alignment: .firstTextBaseline) {
                                 Text(group.title)
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundStyle(.primary)
                                 Spacer()
                                 Text(RU.chars(group.entries.reduce(0) { $0 + $1.characters }))
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.tertiary)
                                     .monospacedDigit()
                             }
+                            .padding(.top, 12)
+                            .padding(.bottom, 4)
                         }
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
                 .contextMenu(forSelectionType: DictationEntry.ID.self) { ids in
                     menu(for: ids)
                 } primaryAction: { ids in
@@ -104,10 +115,12 @@ struct HistoryView: View {
         }
     }
 
-    private func searchBar(found: Int) -> some View {
+    /// R5.5: «История  454 записи» слева, справа поиск и меню «…» (экспорт, подробности, очистка)
+    private func header(found: Int) -> some View {
         let total = state.history.entries.count
         let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
-        return HStack(spacing: 10) {
+        return SectionTitle(title: "История",
+                            subtitle: searching ? "Найдено: \(found)" : "\(RU.number(total)) \(RU.plural(total, "запись", "записи", "записей"))") {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Поиск в истории", text: $query)
@@ -120,24 +133,23 @@ struct HistoryView: View {
                 }
             }
             .padding(.horizontal, 10)
-            .frame(height: 30)
-            .frame(maxWidth: 360)
-            .background(.primary.opacity(0.06), in: .capsule)
-            Spacer()
-            Text(searching ? "Найдено: \(found)" : "\(total) \(RU.plural(total, "запись", "записи", "записей"))")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-            HStack(spacing: 6) {
+            .frame(width: 220, height: 30)
+            .background(.primary.opacity(0.07), in: .capsule)
+            Menu {
                 HistoryToolbarButtons()
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 30, height: 30)
+                    .background(.primary.opacity(0.07), in: .circle)
+                    .contentShape(.circle)
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.glass)
             .menuStyle(.button)
-            .controlSize(.large)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Экспорт, подробности, очистка")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
     }
 
     // MARK: - Меню
