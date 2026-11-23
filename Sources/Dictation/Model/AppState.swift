@@ -46,6 +46,9 @@ final class AppState {
 
     var cancelled: CancelledRecording?
     var undoToastVisible = false { didSet { hud?.update() } }
+    /// Когда показали «Вернуть» (для убывающего кольца)
+    var undoShownAt = Date.now
+    static let undoSeconds = 2.0
     /// Мышь над плашкой записи — раскрыть ✕ и ✓ (следит HUDController).
     var hudHover = false
     /// Плашка сейчас на экране (ставит HUDController).
@@ -333,10 +336,11 @@ final class AppState {
     }
 
     private func showUndoToast() {
+        undoShownAt = .now
         undoToastVisible = true
         toastTask?.cancel()
         toastTask = Task {
-            try? await Task.sleep(for: .seconds(2)) // было 6 с; Камиль: 2 секунды (2026-11-20)
+            try? await Task.sleep(for: .seconds(Self.undoSeconds)) // было 6 с; Камиль: 2 секунды (2026-11-20)
             if !Task.isCancelled { undoToastVisible = false }
         }
     }

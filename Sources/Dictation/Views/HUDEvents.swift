@@ -58,7 +58,8 @@ struct HUDPill: View {
     var body: some View {
         // Кадры по времени нужны только для распознавания и событий. Во время записи кольцо и так
         // обновляется от голоса — без этого плашка 60–120 раз в секунду перерисовывала стекло всю запись.
-        let ticking = state.phase == .transcribing || state.hudEvent != nil
+        // + «Вернуть»: кольцо убывает за 2 с
+        let ticking = state.phase == .transcribing || state.hudEvent != nil || state.undoToastVisible
         TimelineView(.animation(paused: !ticking)) { ctx in
             render(look(ticking ? ctx.date : .now))
         }
@@ -81,7 +82,9 @@ struct HUDPill: View {
         } else if state.isRecording || state.cancelAnimating {
             recording(&L)
         } else if state.undoToastVisible {
-            L.trackOp = 0; L.ringOp = 0
+            // кольцо «Вернуть» убывает — видно, сколько осталось
+            let left = 1 - date.timeIntervalSince(state.undoShownAt) / AppState.undoSeconds
+            L.ringB = max(0, min(1, left)); L.ringColor = RecordingHUD.blue
             L.icon1 = "arrow.uturn.backward"; L.icon1Color = RecordingHUD.blue
             L.tap = .restore
             L.help = "Вернуть отменённую запись"
@@ -119,7 +122,7 @@ struct HUDPill: View {
     /// Распознавание + переходы в него
     private func thinking(_ L: inout Look, _ date: Date) {
         let t = date.timeIntervalSince(state.thinkAt)
-        L.ringB = 0.28; L.ringColor = RecordingHUD.blue; L.ringRot = thinkRot(date)
+        L.ringB = RecordingHUD.thinkArc; L.ringColor = RecordingHUD.blue; L.ringRot = thinkRot(date)
         L.icon1 = "waveform"
         if state.thinkFromRestore {
             // «1. Перемотка»: тряска задом наперёд, потом крутится дуга
@@ -138,7 +141,7 @@ struct HUDPill: View {
             let p = RecordingHUD.toThink, T = max(0.05, p.time)
             if t < T {
                 let k = ease(seg(t, 0, T))
-                L.ringB = state.stopRing + (0.28 - state.stopRing) * k
+                L.ringB = state.stopRing + (RecordingHUD.thinkArc - state.stopRing) * k
                 L.ringColor = mixC(RecordingHUD.red, RecordingHUD.blue, k)
                 L.icon1 = "mic.fill"; L.icon2 = "waveform"; L.mix = seg(t, T * 0.3, T * 0.4)
             }
@@ -153,7 +156,7 @@ struct HUDPill: View {
         let r0 = r < 0 ? r + 360 : r
         let target = r0 < 270 ? 270.0 : 630.0
         L.ringRot = r0 + (target - r0) * close
-        L.ringB = 0.28 + 0.72 * close
+        L.ringB = RecordingHUD.thinkArc + (1 - RecordingHUD.thinkArc) * close
         L.ringColor = mixC(RecordingHUD.blue, greenC, p.amount2 * close)
         L.icon1 = "waveform"; L.icon1Color = .primary
         L.icon2 = "checkmark"; L.icon2Color = mixC(.primary, greenC, p.amount2)
@@ -202,14 +205,14 @@ struct HUDPill: View {
     private func face(_ L: Look) -> some View {
         let content = ZStack {
             ZStack {
-                Circle().stroke(.primary.opacity(0.12 * L.trackOp), lineWidth: RecordingHUD.ring)
+                Circle().stroke(.primary.opacity(0.1 * L.trackOp), lineWidth: RecordingHUD.ring)
                 Circle().trim(from: 0, to: max(0, L.ringB))
                     .stroke(L.ringColor, style: StrokeStyle(lineWidth: RecordingHUD.ring, lineCap: .round))
                     .rotationEffect(.degrees(L.ringRot))
                     .opacity(L.ringOp)
                     .animation(L.tap == .toggle ? .smooth(duration: 0.15) : nil, value: L.ringB) // запись — плавно за голосом
             }
-            .padding(10)
+            .padding(9)
             ZStack {
                 Image(systemName: L.icon1)
                     .foregroundStyle(L.icon1Color)
@@ -218,7 +221,7 @@ struct HUDPill: View {
                     Image(systemName: L.icon2).foregroundStyle(L.icon2Color).opacity(L.mix)
                 }
             }
-            .font(.system(size: 18, weight: .semibold))
+            .font(.system(size: 16, weight: .semibold))
         }
         .frame(width: RecordingHUD.pillHeight, height: RecordingHUD.pillHeight)
         .contentShape(.circle)

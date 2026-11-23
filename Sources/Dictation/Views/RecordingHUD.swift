@@ -103,7 +103,10 @@ struct RecordingHUD: View {
     /// один стеклянный круг 64 pt. Запись — красное кольцо растёт от голоса; распознавание — синяя дуга
     /// крутится; «Вернуть» — круг со стрелкой ↶.
     static let pillHeight: CGFloat = 64
-    static let ring: CGFloat = 4
+    /// 2026-11-23 (Камиль): вариант 4 «Кольцо активности» — толстое кольцо 7 pt, значок 16 pt.
+    static let ring: CGFloat = 7
+    /// Дуга распознавания — доля круга
+    static let thinkArc = 0.3
     /// Цвета заданы явно: системные (accentColor) в неактивном приложении становятся серыми.
     static let red = Color(red: 1.0, green: 0.27, blue: 0.23)
     static let blue = Color(red: 0.04, green: 0.52, blue: 1.0)

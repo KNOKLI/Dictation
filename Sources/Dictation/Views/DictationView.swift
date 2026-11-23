@@ -4,83 +4,101 @@ import SwiftUI
 struct DictationView: View {
     @Environment(AppState.self) private var state
 
+    // 2026-11-24 (Камиль): Q1 «Только главное» — одна большая кнопка и одна подпись.
+    // Прежний «Фокус» (счётчик, последняя диктовка) — `_backup-2026-11-24-Q1/DictationView.swift`.
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 20)
-            hero
-                .frame(height: 170)
-            Spacer().frame(height: 34)
-            controls
-            hints.padding(.top, 14)
+            top.frame(height: 120)
+            Spacer().frame(height: 22)
+            bigButton
+            caption.padding(.top, 18)
             if state.cancelled != nil && !state.isRecording && state.phase != .transcribing {
                 Button {
                     state.restoreCancelled()
                 } label: {
-                    Label("Вернуть отменённую запись (\(RU.duration(state.cancelled?.duration ?? 0)))",
-                          systemImage: "arrow.uturn.backward")
+                    Text("Вернуть отменённую запись (\(RU.duration(state.cancelled?.duration ?? 0)))")
+                        .font(.system(size: 15, weight: .semibold))
                 }
-                .buttonStyle(.glass)
-                .padding(.top, 16)
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .padding(.top, 18)
                 .transition(.opacity)
             }
             if state.phase == .needsModel || state.phase == .downloading {
                 ModelCard().padding(.top, 24).frame(maxWidth: 520)
             }
             Spacer(minLength: 20)
-            if !state.lastText.isEmpty && !state.isRecording {
-                LastDictation()
-                    .frame(maxWidth: 620)
-                    .padding(.bottom, 26)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            Spacer().frame(height: 120)
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.smooth(duration: 0.35), value: state.phase)
-        .animation(.smooth, value: state.lastText)
     }
 
-    // MARK: - Главное: счётчик / волна / распознавание
-
+    /// Над кнопкой: волна во время записи, «Распознаю…», или сообщение (ошибка / загрузка модели)
     @ViewBuilder
-    private var hero: some View {
+    private var top: some View {
         switch state.phase {
         case .recording:
-            VStack(spacing: 20) {
-                MirrorWave(levels: state.levels, height: 96)
-                    .foregroundStyle(.primary)
-                    .opacity(state.micLive ? 1 : 0.3)
-                Text(state.statusText).font(.title2.weight(.medium))
-            }
-            .transition(.blurReplace)
+            MirrorWave(levels: state.levels, height: 90)
+                .foregroundStyle(.primary)
+                .opacity(state.micLive ? 1 : 0.3)
+                .transition(.blurReplace)
         case .transcribing:
-            VStack(spacing: 20) {
-                FocusThinking().frame(height: 96)
+            VStack(spacing: 16) {
+                FocusThinking().frame(height: 80)
                 FocusShimmer(text: "Распознаю…")
             }
             .transition(.blurReplace)
         default:
-            VStack(spacing: 6) {
-                Text(RU.number(state.history.archive.totalCharacters))
-                    .font(.system(size: 96, weight: .thin, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(.snappy, value: state.history.archive.totalCharacters)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Group {
-                    if state.isFailed || state.phase == .loadingModel || state.phase == .needsModel
-                        || state.phase == .downloading {
-                        Text(state.statusText).foregroundStyle(state.isFailed ? .red : .secondary)
-                    } else {
-                        Text("символов надиктовано · сегодня \(RU.number(state.history.todayCharacters))")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .font(.title3)
-                .multilineTextAlignment(.center)
+            if state.isFailed || state.phase == .loadingModel || state.phase == .needsModel
+                || state.phase == .downloading {
+                Text(state.statusText)
+                    .font(.system(size: 17))
+                    .foregroundStyle(state.isFailed ? .red : .secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+            } else {
+                Color.clear
             }
-            .transition(.blurReplace)
+        }
+    }
+
+    /// Большая круглая кнопка: синяя — начать, красная — готово
+    private var bigButton: some View {
+        Button { state.toggle() } label: {
+            Image(systemName: state.isRecording ? "stop.fill" : "mic.fill")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(.white)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 110, height: 110)
+                .background(Circle().fill(state.isRecording ? Color.red : Color.accentColor))
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .disabled(!state.canRecord && !state.isRecording)
+        .opacity(!state.canRecord && !state.isRecording ? 0.45 : 1)
+        .help(state.isRecording ? "Готово — Return" : "Начать диктовку")
+        .animation(.smooth(duration: 0.25), value: state.isRecording)
+    }
+
+    /// Одна подпись под кнопкой
+    @ViewBuilder
+    private var caption: some View {
+        if state.isRecording {
+            HStack(spacing: 14) {
+                Text("Return — готово").foregroundStyle(.secondary)
+                Button("Отменить") { state.cancel() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Esc")
+            }
+            .font(.system(size: 17))
+        } else {
+            Text("Нажми или \(state.triggerKind.title)")
+                .font(.system(size: 17))
+                .foregroundStyle(.secondary)
         }
     }
 

@@ -43,15 +43,20 @@ struct ContentView: View {
         PageContainer(section: section, state: state)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .toolbar {
+                // 2026-11-24 (Камиль): Q1 «Только главное» — разделы простыми словами
                 ToolbarItem(placement: .principal) {
-                    Picker("Раздел", selection: $section) {
+                    HStack(spacing: 28) {
                         ForEach(Section.allCases) { s in
-                            Text(s.title).tag(s)
+                            Button { section = s } label: {
+                                Text(s.title)
+                                    .font(.system(size: 15, weight: s == section ? .semibold : .regular))
+                                    .foregroundStyle(s == section ? .primary : .tertiary)
+                                    .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 400)
+                    .padding(.horizontal, 12)
                 }
                 // Панель одинаковая во всех разделах — macOS не перекладывает её при переключении
                 ToolbarItem(placement: .primaryAction) {

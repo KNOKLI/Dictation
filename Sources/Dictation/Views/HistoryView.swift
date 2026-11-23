@@ -73,7 +73,9 @@ struct HistoryView: View {
                     ForEach(groups) { group in
                         SwiftUI.Section {
                             ForEach(group.entries) { entry in
-                                HistoryRow(entry: entry, query: query)
+                                HistoryRow(entry: entry, query: query,
+                                           selected: ui.selection == [entry.id],
+                                           onEdit: { edit(entry.id) })
                                     .tag(entry.id)
                             }
                         } header: {
@@ -92,9 +94,7 @@ struct HistoryView: View {
                 } primaryAction: { ids in
                     // двойной клик — править
                     guard let id = ids.first, ids.count == 1 else { return }
-                    selection = [id]
-                    showInspector = true
-                    state.editingEntryID = id
+                    edit(id)
                 }
                 .onDeleteCommand { delete(selection) }
                 .onCopyCommand {
@@ -160,6 +160,12 @@ struct HistoryView: View {
                 delete(ids)
             }
         }
+    }
+
+    private func edit(_ id: DictationEntry.ID) {
+        selection = [id]
+        showInspector = true
+        state.editingEntryID = id
     }
 
     private func selectedText(_ ids: Set<DictationEntry.ID>) -> String {
@@ -296,41 +302,42 @@ private struct EntryInspector: View {
     }
 }
 
+/// 2026-11-24 (Камиль): Q1 «Только главное» — крупная строка: время серым, текст 17,
+/// у выбранной записи справа «Копировать» и «Изменить» словами.
 private struct HistoryRow: View {
     let entry: DictationEntry
     let query: String
-    @State private var hovering = false
+    var selected = false
+    var onEdit: () -> Void = {}
+    @State private var copied = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(highlighted)
-                    .font(.body)
-                    .lineLimit(4)
-                HStack(spacing: 6) {
-                    Text(RU.time(entry.date))
-                    Text("·")
-                    Text(RU.chars(entry.characters))
-                    Text("·")
-                    Text(RU.duration(entry.duration))
-                    if entry.isEdited {
-                        Text("·")
-                        Label("изменено", systemImage: "pencil").labelStyle(.titleAndIcon)
-                    }
+        HStack(spacing: 18) {
+            Text(RU.time(entry.date))
+                .font(.system(size: 15).monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .frame(width: 48, alignment: .leading)
+            Text(highlighted)
+                .font(.system(size: 17))
+                .lineLimit(1)
+            Spacer(minLength: 16)
+            if selected {
+                Button(copied ? "Скопировано" : "Копировать") {
+                    Paster.copy(entry.text)
+                    copied = true
+                    Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
                 }
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary) // строка выделена синим — синий текст был бы не виден
+                Button("Изменить", action: onEdit)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
-            Button { Paster.copy(entry.text) } label: {
-                Image(systemName: "doc.on.doc")
-            }
-            .buttonStyle(.borderless)
-            .help("Копировать")
-            .opacity(hovering ? 1 : 0)
         }
-        .padding(.vertical, 6)
-        .onHover { hovering = $0 }
+        .frame(minHeight: 40)
+        .help(entry.text.count > 80 ? entry.text : "")
     }
 
     /// Найденное слово подсвечено.
@@ -356,7 +363,7 @@ private struct HistoryRow: View {
 final class HistoryUI {
     var selection = Set<DictationEntry.ID>()
     var confirmClear = false
-    var showInspector = true
+    var showInspector = false // 2026-11-24 (Камиль, Q1): открывается только при «Изменить»
 }
 
 /// Действия с историей, доступные из панели инструментов.
