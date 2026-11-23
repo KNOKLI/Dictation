@@ -37,7 +37,8 @@ enum Section: String, CaseIterable, Identifiable {
 /// разделы — стеклянный переключатель по центру панели инструментов.
 struct ContentView: View {
     @Environment(AppState.self) private var state
-    @State private var section: Section = .dictation
+    // `--args -startSection history` — открыть сразу нужный раздел (для снимков проверки в фоне)
+    @State private var section: Section = Section(rawValue: UserDefaults.standard.string(forKey: "startSection") ?? "") ?? .dictation
 
     var body: some View {
         PageContainer(section: section, state: state)

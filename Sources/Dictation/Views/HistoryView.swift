@@ -25,23 +25,26 @@ struct HistoryView: View {
         let found = groups.reduce(0) { $0 + $1.entries.count }
         // Поиск и панель подробностей — внутри окна, а не в панели инструментов:
         // так переключатель разделов не сдвигается и не перестраивается (не лагает).
-        HStack(spacing: 0) {
-            // 2026-11-24 (Камиль): R5.5 — крупный заголовок и одна колонка по центру
-            VStack(spacing: 6) {
-                header(found: found)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 24)
+        // 2026-11-24 (Камиль): V7 «Герой и полки» — сверху последняя запись крупно, ниже список и подробности.
+        // Прежний R5.5 — `_backup-2026-11-24-V7/HistoryView.swift`.
+        VStack(alignment: .leading, spacing: V7.gap) {
+            hero
+            header(found: found).padding(.top, 4)
+            HStack(spacing: V7.gap) {
                 listArea(groups: groups)
-            }
-            .frame(maxWidth: R55.column + 40)
-            .frame(maxWidth: .infinity)
-            if showInspector {
-                Divider()
-                EntryInspector(selection: selection, onDelete: { delete($0) })
-                    .frame(width: 330)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.background.secondary, in: .rect(cornerRadius: V7.radius, style: .continuous))
+                    .clipShape(.rect(cornerRadius: V7.radius, style: .continuous))
+                if showInspector {
+                    EntryInspector(selection: selection, onDelete: { delete($0) })
+                        .frame(width: 360)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .background(.background.secondary, in: .rect(cornerRadius: V7.radius, style: .continuous))
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
         }
+        .padding(.horizontal, V7.pad).padding(.top, 8).padding(.bottom, V7.pad)
         .animation(.smooth(duration: 0.25), value: showInspector)
         .background {
             Button("Поиск") { searchFocused = true }
@@ -85,16 +88,16 @@ struct HistoryView: View {
                         } header: {
                             HStack(alignment: .firstTextBaseline) {
                                 Text(group.title)
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundStyle(.primary)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.secondary)
                                 Spacer()
                                 Text(RU.chars(group.entries.reduce(0) { $0 + $1.characters }))
                                     .font(.system(size: 13))
                                     .foregroundStyle(.tertiary)
                                     .monospacedDigit()
                             }
-                            .padding(.top, 12)
-                            .padding(.bottom, 4)
+                            .padding(.top, 8)
+                            .padding(.bottom, 2)
                         }
                     }
                 }
@@ -115,12 +118,46 @@ struct HistoryView: View {
         }
     }
 
-    /// R5.5: «История  454 записи» слева, справа поиск и меню «…» (экспорт, подробности, очистка)
+    /// V7: «герой» — последняя запись крупно, сколько сегодня, «Копировать» и «Изменить»
+    @ViewBuilder
+    private var hero: some View {
+        let entries = state.history.entries
+        let today = entries.filter { Calendar.current.isDateInToday($0.date) }
+        HeroCard(symbol: "clock.arrow.circlepath", height: 180) {
+            if let last = entries.first {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(today.isEmpty
+                         ? "Последняя запись · \(HistoryStore.title(for: last.date)), \(RU.time(last.date))"
+                         : "Сегодня · \(today.count) \(RU.plural(today.count, "запись", "записи", "записей")) · \(RU.chars(today.reduce(0) { $0 + $1.characters }))")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                    Text("«\(last.text)»")
+                        .font(.system(size: 26, weight: .semibold))
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                    HStack(spacing: 10) {
+                        HeroCopyButton(text: last.text)
+                        Button("Изменить", systemImage: "pencil") { edit(last.id) }
+                            .buttonStyle(.glass)
+                    }
+                }
+                .padding(.trailing, 120)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Пока нет записей").font(.system(size: 30, weight: .bold))
+                    Text("Здесь будут все надиктованные тексты — с поиском, правкой и экспортом.")
+                        .font(.system(size: 15.5)).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// V7: «Все записи 455» слева, справа поиск и меню «…» (экспорт, подробности, очистка)
     private func header(found: Int) -> some View {
         let total = state.history.entries.count
         let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
-        return SectionTitle(title: "История",
-                            subtitle: searching ? "Найдено: \(found)" : "\(RU.number(total)) \(RU.plural(total, "запись", "записи", "записей"))") {
+        return ShelfTitle(title: "Все записи",
+                          count: searching ? "найдено: \(found)" : RU.number(total)) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Поиск в истории", text: $query)
@@ -375,7 +412,7 @@ private struct HistoryRow: View {
 final class HistoryUI {
     var selection = Set<DictationEntry.ID>()
     var confirmClear = false
-    var showInspector = false // 2026-11-24 (Камиль, Q1): открывается только при «Изменить»
+    var showInspector = true // 2026-11-24 (Камиль, V7): подробности справа видны всегда, «…» → «Подробности» скрывает
 }
 
 /// Действия с историей, доступные из панели инструментов.
@@ -436,5 +473,23 @@ struct HistoryToolbarButtons: View {
 
         Button("Подробности", systemImage: "sidebar.right") { ui.showInspector.toggle() }
             .help("Полный текст выбранной записи")
+    }
+}
+
+/// Кнопка «Копировать» в «герое» Истории: показывает «Скопировано» 1,5 с
+private struct HeroCopyButton: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            Paster.copy(text)
+            copied = true
+            Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+        } label: {
+            Label(copied ? "Скопировано" : "Копировать", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.glassProminent)
     }
 }
