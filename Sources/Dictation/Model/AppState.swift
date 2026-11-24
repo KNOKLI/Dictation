@@ -241,7 +241,7 @@ final class AppState {
             DispatchQueue.main.async {
                 guard let self, self.isRecording else { return }
                 self.micLive = true
-                self.sound("Tink") // «дзынь» = можно говорить
+                self.sound(Self.startSound) // «можно говорить»
             }
         }
         recorder.onLevel = { [weak self] level in
@@ -302,6 +302,7 @@ final class AppState {
         let duration = Date.now.timeIntervalSince(recordingStartedAt ?? .now)
         recordingStartedAt = nil
         releaseSessionKeys()
+        if !silent { sound(Self.cancelSound) }
         let canUndo = !silent && duration >= Self.undoMinDuration
         if canUndo { cancelled = CancelledRecording(samples: samples, duration: duration, paste: pasteWhenDone) }
         // 2026-11-21 (Камиль): плашка на экране — сначала трясётся «нет» и уходит, потом «Вернуть»
@@ -423,7 +424,7 @@ final class AppState {
         releaseSessionKeys()
         let duration = Date.now.timeIntervalSince(recordingStartedAt ?? .now)
         recordingStartedAt = nil
-        sound("Pop")
+        sound(Self.stopSound)
         let level = Double(levels.suffix(3).max() ?? 0)
         stopRing = micLive ? 0.1 + 0.9 * level : 0
         transcribeAndDeliver(samples: samples, duration: duration, paste: pasteWhenDone)
@@ -433,6 +434,7 @@ final class AppState {
         // Слишком коротко или тишина — нечего распознавать
         let peak = samples.reduce(Float(0)) { max($0, abs($1)) }
         guard samples.count > 16_000 / 3, peak > 0.01 else {
+            sound(Self.failSound)
             fireHUD(.fail, fromThinking: false) // «пожал плечами» — до смены фазы, чтобы плашка не пропала
             phase = .idle
             return
@@ -446,6 +448,7 @@ final class AppState {
             guard let raw else {
                 // сбой распознавания — не теряем запись молча: её можно вернуть и попробовать ещё раз
                 cancelled = CancelledRecording(samples: samples, duration: duration, paste: paste)
+                sound(Self.failSound)
                 showUndoToast() // до смены фазы — иначе плашка на миг пропадает и заново «прилетает»
                 phase = .failed("Не удалось распознать запись — нажми «Вернуть», чтобы попробовать ещё раз")
                 return
@@ -454,9 +457,11 @@ final class AppState {
             if !text.isEmpty {
                 let entry = history.add(text: text, duration: duration)
                 lastEntryID = entry.id
+                sound(Self.doneSound)
                 fireHUD(.success, fromThinking: true) // «Галочка» сразу, вставка идёт параллельно
                 await deliver(text, paste: paste)
             } else {
+                sound(Self.failSound)
                 fireHUD(.fail, fromThinking: true)    // распознал пустоту
             }
             phase = .idle
@@ -540,8 +545,15 @@ final class AppState {
         levels.append(level)
     }
 
-    private func sound(_ name: String) {
+    /// 2026-11-25 (Камиль): набор 19 «Тень» из галереи `../Dictation_Звуки` - начало, конец, готово,
+    /// отмена, не вышло. 4 варианта на звук, каждый раз случайный - не приедается.
+    /// Прежние: системные "Tink" / "Pop", потом набор 20 (`_backup-2026-11-25-звуки/`).
+    static let startSound = "19_start", stopSound = "19_stop", doneSound = "19_done",
+               cancelSound = "19_cancel", failSound = "19_fail", soundVariants = 4
+
+    private func sound(_ base: String) {
         guard playSounds else { return }
+        let name = "\(base)_v\(Int.random(in: 0..<Self.soundVariants))"
         // Звук загружается один раз и играет вне главного потока —
         // раньше NSSound(named:) читал файл и запускал аудио прямо в момент старта записи (~37 мс подвисания).
         Self.soundQueue.async {
@@ -557,14 +569,20 @@ final class AppState {
     /// Вызывается только из soundQueue.
     nonisolated private static func cachedSound(_ name: String) -> NSSound? {
         if let s = sounds[name] { return s }
-        let s = NSSound(named: name)
+        let s = Bundle.main.url(forResource: name, withExtension: "wav")
+            .flatMap { NSSound(contentsOf: $0, byReference: false) } ?? NSSound(named: name)
         sounds[name] = s
         return s
     }
 
     /// Прогрев звуков при запуске, чтобы первая диктовка не ждала загрузки.
     func preloadSounds() {
-        for name in ["Tink", "Pop"] { Self.soundQueue.async { _ = Self.cachedSound(name) } }
+        for base in [Self.startSound, Self.stopSound, Self.doneSound, Self.cancelSound, Self.failSound] {
+            for v in 0..<Self.soundVariants {
+                let name = "\(base)_v\(v)"
+                Self.soundQueue.async { _ = Self.cachedSound(name) }
+            }
+        }
     }
 
     static func microphoneAccess() async -> Bool {

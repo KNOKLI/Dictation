@@ -173,6 +173,8 @@ struct HUDPill: View {
         let b = bump(t * 0.4 / T, p.spring)
         L.sy = 1 - CGFloat(p.amount * 0.25 * b); L.sx = 1 + CGFloat(p.amount * 0.15 * b)
         L.icon2 = "questionmark"; L.mix = seg(t, 0, 0.15)
+        // 2026-11-25 (Камиль): дуга при «?» — жёлтая (плавно из синей)
+        L.ringColor = mixC(L.ringColor, RecordingHUD.yellow, seg(t, 0, 0.15))
         exitOut(&L, t - T - p.hold)
     }
 

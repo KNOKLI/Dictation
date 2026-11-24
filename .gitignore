@@ -21,3 +21,5 @@ CLAUDE.md
 # секреты
 .env
 *.env
+# движок whisper.cpp собирается scripts/build_whisper.sh
+vendor/

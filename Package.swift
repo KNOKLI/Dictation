@@ -1,9 +1,9 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// Движок распознавания — whisper.cpp из Homebrew (brew install whisper-cpp)
-let whisper = "/opt/homebrew/opt/whisper.cpp"
-let ggml = "/opt/homebrew/opt/ggml"
+// Движок распознавания — whisper.cpp, собранный статически внутрь приложения (scripts/build_whisper.sh,
+// 2026-11-25): пользователям не нужен Homebrew. Раньше брался из Homebrew (brew install whisper-cpp).
+let vendor = Context.packageDirectory + "/vendor/whisper"
 
 let package = Package(
     name: "Dictation",
@@ -11,11 +11,18 @@ let package = Package(
     targets: [
         .target(
             name: "CWhisper",
-            cSettings: [.unsafeFlags(["-I\(whisper)/include", "-I\(ggml)/include"])],
-            linkerSettings: [.unsafeFlags([
-                "-L\(whisper)/lib", "-lwhisper", "-L\(ggml)/lib", "-lggml", "-lggml-base",
-                "-Xlinker", "-rpath", "-Xlinker", "\(whisper)/lib",
-            ])]
+            cSettings: [.unsafeFlags(["-I\(vendor)/include"])],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-L\(vendor)/lib", "-lwhisper", "-lggml", "-lggml-base", "-lggml-cpu",
+                    "-lggml-metal", "-lggml-blas",
+                ]),
+                .linkedLibrary("c++"),
+                .linkedFramework("Accelerate"),
+                .linkedFramework("Metal"),
+                .linkedFramework("MetalKit"),
+                .linkedFramework("Foundation"),
+            ]
         ),
         .executableTarget(
             name: "Dictation",

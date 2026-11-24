@@ -19,16 +19,7 @@ if (( $(sw_vers -productVersion | cut -d. -f1) < 26 )); then
     echo "Нужна macOS 26 или новее." >&2; exit 1
 fi
 
-# 2. Движок распознавания whisper.cpp из Homebrew
-if ! command -v brew >/dev/null; then
-    echo "Нужен Homebrew: https://brew.sh — установи его и запусти этот скрипт снова." >&2; exit 1
-fi
-if ! brew list whisper-cpp >/dev/null 2>&1; then
-    echo "→ Ставлю движок распознавания (whisper-cpp)…"
-    brew install whisper-cpp
-fi
-
-# 3. Скачиваю последнюю версию
+# 2. Скачиваю последнюю версию (движок распознавания уже внутри - Homebrew не нужен, 2026-11-25)
 echo "→ Скачиваю приложение…"
 if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
     gh release download --repo "$REPO" --pattern "Dictation.zip" --dir "$TMP"
@@ -36,7 +27,7 @@ else
     curl -fL --progress-bar "https://github.com/$REPO/releases/latest/download/Dictation.zip" -o "$TMP/Dictation.zip"
 fi
 
-# 4. Ставлю в «Программы»
+# 3. Ставлю в «Программы»
 osascript -e 'quit app "Dictation"' >/dev/null 2>&1 || true
 ditto -x -k "$TMP/Dictation.zip" "$TMP"
 rm -rf "$APP"

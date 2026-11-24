@@ -7,7 +7,7 @@ large-v3-turbo), без интернета и без отправки голос
 - История записей с поиском, свой словарь и автозамены, голосовые команды («новая строка», «запятая»…).
 - Статистика: сколько символов надиктовано сегодня, за неделю и всего.
 
-**Нужно:** Mac на Apple Silicon (M1 и новее), macOS 26 или новее, [Homebrew](https://brew.sh).
+**Нужно:** Mac на Apple Silicon (M1 и новее), macOS 26 или новее. Больше ничего ставить не нужно: движок распознавания уже внутри приложения.
 
 ## Установка
 
@@ -17,15 +17,13 @@ large-v3-turbo), без интернета и без отправки голос
 curl -fsSL https://raw.githubusercontent.com/KNOKLI/Dictation/main/install.sh | bash
 ```
 
-Скрипт поставит движок распознавания (`brew install whisper-cpp`), скачает последнюю версию
-из [Releases](https://github.com/KNOKLI/Dictation/releases) в «Программы» и запустит её.
+Скрипт скачает последнюю версию из [Releases](https://github.com/KNOKLI/Dictation/releases) в «Программы» и запустит её.
 
 ### Вручную
 
-1. `brew install whisper-cpp`
-2. Скачай `Dictation.zip` в [Releases](https://github.com/KNOKLI/Dictation/releases/latest), распакуй
+1. Скачай `Dictation.zip` в [Releases](https://github.com/KNOKLI/Dictation/releases/latest), распакуй
    и перетащи `Dictation.app` в «Программы».
-3. Приложение подписано не через Apple, поэтому при первом запуске macOS его остановит. Открой его так:
+2. Приложение подписано не через Apple, поэтому при первом запуске macOS его остановит. Открой его так:
    правый клик по `Dictation.app` → «Открыть» → «Открыть». Или в Терминале:
    `xattr -dr com.apple.quarantine /Applications/Dictation.app`
 
@@ -39,7 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/KNOKLI/Dictation/main/install.sh | 
 ## Сборка из исходников
 
 ```bash
-brew install whisper-cpp
+brew install cmake     # нужен только для сборки движка whisper.cpp (scripts/build_whisper.sh)
 ./build.sh            # → build/Dictation.app
 ./build.sh install    # → ещё и в /Applications
 ```

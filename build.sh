@@ -3,6 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# движок распознавания внутрь приложения (один раз; нужен cmake)
+[[ -f vendor/whisper/lib/libwhisper.a ]] || ./scripts/build_whisper.sh
+
 swift build -c release
 
 if [[ ! -f Resources/AppIcon.icns ]]; then
@@ -22,6 +25,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Dictation "$APP/Contents/MacOS/Dictation"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp Resources/Sounds/*.wav "$APP/Contents/Resources/" # звуки набора 19 «Тень», 2026-11-25
+cp Resources/whisper.cpp-LICENSE.txt "$APP/Contents/Resources/" # лицензия MIT встроенного движка
 # Локальный сертификат (создан 2026-11-15, лежит в связке «login»): подпись одинаковая у всех сборок,
 # поэтому «Универсальный доступ» и микрофон не слетают после пересборки. Нет сертификата — ad-hoc.
 IDENTITY="Dictation Local Signing"

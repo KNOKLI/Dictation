@@ -44,7 +44,11 @@ final class HUDController {
             return
         }
         if !state.hudShown { state.hudShown = true }
-        if let screen = NSScreen.main {
+        // 2026-11-25: плашка — на экране, где сейчас мышь (где работает Камиль).
+        // NSScreen.main при неактивном приложении — экран старого окна Dictation, поэтому плашку
+        // было видно только на одном мониторе.
+        let mouse = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main {
             let f = screen.visibleFrame
             panel.setFrameOrigin(NSPoint(x: f.midX - Self.size.width / 2, y: f.minY + 12))
         }
@@ -110,6 +114,8 @@ struct RecordingHUD: View {
     /// Цвета заданы явно: системные (accentColor) в неактивном приложении становятся серыми.
     static let red = Color(red: 1.0, green: 0.27, blue: 0.23)
     static let blue = Color(red: 0.04, green: 0.52, blue: 1.0)
+    /// Системный жёлтый macOS — дуга при «?» (не распознано), 2026-11-25
+    static let yellow = Color(red: 1.0, green: 0.8, blue: 0.0)
 
     @ViewBuilder
     private var pill: some View {
