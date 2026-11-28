@@ -28,7 +28,13 @@ final class HUDController {
         // Ушёл в другое приложение посреди записи — плашка должна появиться (и спрятаться, когда вернулся)
         for name in [NSApplication.didResignActiveNotification, NSApplication.didBecomeActiveNotification] {
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.update() }
+                MainActor.assumeIsolated {
+                    self?.update()
+                    // macOS обновляет isActive после уведомления; повторяем проверку уже после этого.
+                    DispatchQueue.main.async { [weak self] in
+                        self?.update()
+                    }
+                }
             }
         }
     }
@@ -37,12 +43,13 @@ final class HUDController {
         let active = state.phase == .recording || state.phase == .transcribing || state.undoToastVisible
             || state.cancelAnimating // плашка видна, пока трясётся после Esc
             || state.hudEvent != nil  // и пока показывает ✓ / «пожал плечами»
-        guard active, !NSApp.isActive else {
+        guard active else {
             panel.orderOut(nil)
-            stopHoverTracking()
+            stopTracking()
             if state.hudShown { state.hudShown = false }
             return
         }
+        startVisibilityTracking()
         if !state.hudShown { state.hudShown = true }
         // 2026-11-25: плашка — на экране, где сейчас мышь (где работает Камиль).
         // NSScreen.main при неактивном приложении — экран старого окна Dictation, поэтому плашку
@@ -57,9 +64,19 @@ final class HUDController {
     }
 
     // MARK: - Наведение мыши
-    // В неактивном приложении SwiftUI .onHover в плашке не срабатывает — проверяем мышь сами, 10 раз в секунду.
+    // В неактивном приложении SwiftUI .onHover в плашке не срабатывает — проверяем мышь сами, 30 раз в секунду.
 
     private var hoverTimer: Timer?
+    private var visibilityTimer: Timer?
+
+    private func startVisibilityTracking() {
+        guard visibilityTimer == nil else { return }
+        // Уведомления активации иногда теряются при переключении разделов/окон.
+        // Периодическая сверка возвращает плашку в нужный момент.
+        visibilityTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.update() }
+        }
+    }
 
     private func startHoverTracking() {
         guard hoverTimer == nil else { return }
@@ -67,6 +84,12 @@ final class HUDController {
         hoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkHover() }
         }
+    }
+
+    private func stopTracking() {
+        stopHoverTracking()
+        visibilityTimer?.invalidate()
+        visibilityTimer = nil
     }
 
     private func stopHoverTracking() {
